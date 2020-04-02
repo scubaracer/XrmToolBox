@@ -1,0 +1,1 @@
+﻿All project references that have the option 'Copy Local' set to 'true', will be merged into the output assembly.

@@ -1,0 +1,22 @@
+﻿# This file is used to exclude certain files from ILMerge. 
+# 
+# Normally, the CopyLocal attribute is used to check what should be merged. All assembly names specified in this file will be ignored, 
+# even if their CopyLocal=true.
+#
+# Lines starting with '#' are ignored.
+
+# Example:
+#
+Microsoft.Xrm.Sdk.Workflow.dll
+Microsoft.IdentityModel.dll
+McTools.Xrm.Connection.dll
+McTools.Xrm.Connection.WinForms.dll
+Microsoft.Crm.Sdk.Proxy.dll
+Microsoft.Xrm.Client.dll
+Microsoft.Xrm.Sdk.Deployment.dll
+Microsoft.Xrm.Sdk.dll
+XrmToolBox.exe
+XrmToolBox.Extensibility.dll
+Microsoft.Xrm.Client.CodeGeneration.dll
+Microsoft.Xrm.Portal.dll
+Microsoft.Xrm.Portal.Files.dll
