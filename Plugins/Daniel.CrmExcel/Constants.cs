@@ -65,25 +65,27 @@
 
         public const int ColAttributeOptionset = 8;
 
-        public const int ColAttributeMin = 9;
+        public const int ColAttributeOptionsetGlobal = 9;
 
-        public const int ColAttributeMax = 10;
+        public const int ColAttributeMin = 10;
 
-        public const int ColAttributeRequired = 11;
+        public const int ColAttributeMax = 11;
 
-        public const int ColAttributeIsAuditEnabled = 12;
+        public const int ColAttributeRequired = 12;
 
-        public const int ColAttributeIsValidForAdvancedFind = 13;
+        public const int ColAttributeIsAuditEnabled = 13;
 
-        public const int ColAttributeDescription = 14;
+        public const int ColAttributeIsValidForAdvancedFind = 14;
 
-        public const int ColAttributeForm = 15;
+        public const int ColAttributeDescription = 15;
 
-        public const int ColAttributeDateBehavior = 16;
+        public const int ColAttributeForm = 16;
 
-        public const int ColAttributeDateFormat = 17;
+        public const int ColAttributeDateBehavior = 17;
 
-        public const int ColAttributeErrors = 18;
+        public const int ColAttributeDateFormat = 18;
+
+        public const int ColAttributeErrors = 19;
 
         public const int ColRelationShipSchemaName = 2;
 

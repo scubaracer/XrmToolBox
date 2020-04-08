@@ -1,5 +1,4 @@
 ﻿using XrmToolBox.Extensibility;
-using XrmToolBox.Extensibility.Interfaces;
 
 namespace Daniel.CrmExcel
 {
@@ -10,10 +9,7 @@ namespace Daniel.CrmExcel
     using System.Linq;
     using System.Windows.Forms;
     using System.Xml;
-
     using Ionic.Zip;
-
-
     using Microsoft.Crm.Sdk.Messages;
     using Microsoft.Xrm.Sdk;
     using Microsoft.Xrm.Sdk.Messages;
@@ -138,7 +134,7 @@ namespace Daniel.CrmExcel
                     }
                 }
 
-               excelPackage.Save();
+                excelPackage.Save();
             }
         }
 
@@ -233,6 +229,7 @@ namespace Daniel.CrmExcel
             this.worksheetAttributes.Cell(1, Constants.ColAttributeDisplayName).Value = "DisplayName (C,U)";
             this.worksheetAttributes.Cell(1, Constants.ColAttributeMaxLength).Value = "MaxLength (C,U)";
             this.worksheetAttributes.Cell(1, Constants.ColAttributeOptionset).Value = "Optionset values (C)";
+            this.worksheetAttributes.Cell(1, Constants.ColAttributeOptionsetGlobal).Value = "Is global optionset";
             this.worksheetAttributes.Cell(1, Constants.ColAttributeMin).Value = "Min value (C)";
             this.worksheetAttributes.Cell(1, Constants.ColAttributeMax).Value = "Max value (C)";
             this.worksheetAttributes.Cell(1, Constants.ColAttributeIsAuditEnabled).Value = "IsAuditEnabled (C,U)";
@@ -644,6 +641,7 @@ namespace Daniel.CrmExcel
                                 }
 
                                 this.worksheetAttributes.Cell(rowAttributeIndex, Constants.ColAttributeOptionset).Value = optionString;
+                                this.worksheetAttributes.Cell(rowAttributeIndex, Constants.ColAttributeOptionsetGlobal).Value = picklistAttributeMetadata.OptionSet.IsGlobal.GetValueOrDefault(false).ToString();
                                 break;
                             }
 

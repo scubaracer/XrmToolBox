@@ -43,21 +43,27 @@ IF EXIST ILMerge.log DEL /s /q ILMerge.log
 
 SET REFASSEMBLIES=%PROGRAMFILES(X86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.2
 SET REFLIB=%PROGRAMFILES(X86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.2\Facades
+::C:\Windows\Microsoft.NET\Framework64\v4.0.30319
+
+::%PROGRAMFILES(X86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.2\Facades
 
 :: try find ILMerge in PATH variable...
 for %%X in (ILMerge.exe) do (set ILMERGE=%%~$PATH:X)
 if not defined ILMERGE (
 :: not found, set to program file path.
-	set ILMERGE="%PROGRAMFILES(X86)%\Microsoft\ILMerge\ILMerge.exe"
+	::set ILMERGE="%PROGRAMFILES(X86)%\Microsoft\ILMerge\ILMerge.exe"
+	set ILMERGE="..\..\..\..\packages\ILMerge.Tools.2.14.1208\tools\ILMerge.exe"
 )
 
 ECHO ------Merging------
 ECHO ILMerge location: %ILMERGE%
 ECHO Reference Assemblies: %REFASSEMBLIES%
 ECHO Reference Lib: %REFLIB%
+ECHO keyfile : %KEYFILE%
+ECHO PROJECTBINARY : %PROJECTBINARY% 
+ECHO ASSEMBLIESTOMERGE : %ASSEMBLIESTOMERGE%
 
-::%ILMERGE% /log:ILMerge.log /keyfile:"%KEYFILE%" /targetplatform:v4,"%REFASSEMBLIES%" /lib:"%REFLIB%" /out:tmp_merge\%PROJECTBINARY% %ASSEMBLIESTOMERGE%
-%ILMERGE% /log:ILMerge.log /targetplatform:v4,"%REFASSEMBLIES%" /lib:"%REFLIB%" /out:tmp_merge\%PROJECTBINARY% %ASSEMBLIESTOMERGE%
+%ILMERGE% /log:ILMerge.log /keyfile:"%KEYFILE%" /targetplatform:v4,"%REFASSEMBLIES%" /lib:"%REFLIB%" /out:tmp_merge\%PROJECTBINARY% %ASSEMBLIESTOMERGE% 
 
 DEL tmp_merge\Temp.*
 
