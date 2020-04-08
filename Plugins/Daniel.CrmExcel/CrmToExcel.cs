@@ -641,7 +641,15 @@ namespace Daniel.CrmExcel
                                 }
 
                                 this.worksheetAttributes.Cell(rowAttributeIndex, Constants.ColAttributeOptionset).Value = optionString;
-                                this.worksheetAttributes.Cell(rowAttributeIndex, Constants.ColAttributeOptionsetGlobal).Value = picklistAttributeMetadata.OptionSet.IsGlobal.GetValueOrDefault(false).ToString();
+                                if (picklistAttributeMetadata.OptionSet.IsGlobal.GetValueOrDefault(false))
+                                {
+                                    this.worksheetAttributes.Cell(rowAttributeIndex, Constants.ColAttributeOptionsetGlobal).Value = $"{picklistAttributeMetadata.OptionSet.IsGlobal.GetValueOrDefault(false)}:{picklistAttributeMetadata.OptionSet.Name}";
+                                }
+                                else
+                                {
+                                    this.worksheetAttributes.Cell(rowAttributeIndex, Constants.ColAttributeOptionsetGlobal).Value = $"{picklistAttributeMetadata.OptionSet.IsGlobal.GetValueOrDefault(false)}";
+                                }
+
                                 break;
                             }
 

@@ -475,29 +475,64 @@ namespace Daniel.CrmExcel
 
                                 case AttributeTypeCode.Picklist:
                                     {
-                                        var options = worksheetAttributes.Cell(currentRow, Constants.ColAttributeOptionset).Value.Split(";".ToCharArray());
-                                        var optionSet = new OptionSetMetadata
-                                                            {
-                                                                IsGlobal = false,
-                                                                OptionSetType = OptionSetType.Picklist
-                                                            };
-                                        foreach (var option in options)
+                                        if (worksheetAttributes.Cell(currentRow, Constants.ColAttributeOptionsetGlobal).Value.Contains(":"))
                                         {
-                                            if (option != string.Empty)
+                                            //var options = worksheetAttributes.Cell(currentRow, Constants.ColAttributeOptionset).Value.Split(";".ToCharArray());
+                                            var parts = worksheetAttributes.Cell(currentRow, Constants.ColAttributeOptionsetGlobal).Value.Split(":".ToCharArray());
+                                            var optionSet = new OptionSetMetadata
                                             {
-                                                var optionMetaData = new OptionMetadata();
-                                                var optionData = option.Split(":".ToCharArray());
-                                                optionMetaData.Label = new Label(optionData[1], this.LanguageCode);
-                                                optionMetaData.Value = Convert.ToInt32(optionData[0]);
-                                                optionSet.Options.Add(optionMetaData);
+                                                IsGlobal = true,
+                                                Name = parts[1],
+                                                OptionSetType = OptionSetType.Picklist,
+                                                DisplayName = new Label(worksheetAttributes.Cell(currentRow, Constants.ColAttributeDisplayName).Value, this.LanguageCode),
+                                            };
+
+                                            //foreach (var option in options)
+                                            //{
+                                            //    if (option != string.Empty)
+                                            //    {
+                                            //        var optionMetaData = new OptionMetadata();
+                                            //        var optionData = option.Split(":".ToCharArray());
+                                            //        optionMetaData.Label = new Label(optionData[1], this.LanguageCode);
+                                            //        optionMetaData.Value = Convert.ToInt32(optionData[0]);
+                                            //        optionSet.Options.Add(optionMetaData);
+                                            //    }
+                                            //}
+
+                                            var pickListAttribute = new PicklistAttributeMetadata
+                                            {
+                                                OptionSet = optionSet,
+//                                                LogicalName = worksheetAttributes.Cell(currentRow, Constants.ColAttributeSchemaName).Value
+                                            };
+                                            newAttribute = pickListAttribute;
+                                        }
+                                        else
+                                        {
+                                            var options = worksheetAttributes.Cell(currentRow, Constants.ColAttributeOptionset).Value.Split(";".ToCharArray());
+                                            var optionSet = new OptionSetMetadata
+                                                                {
+                                                                    IsGlobal = false,
+                                                                    OptionSetType = OptionSetType.Picklist
+                                                                };
+                                            foreach (var option in options)
+                                            {
+                                                if (option != string.Empty)
+                                                {
+                                                    var optionMetaData = new OptionMetadata();
+                                                    var optionData = option.Split(":".ToCharArray());
+                                                    optionMetaData.Label = new Label(optionData[1], this.LanguageCode);
+                                                    optionMetaData.Value = Convert.ToInt32(optionData[0]);
+                                                    optionSet.Options.Add(optionMetaData);
+                                                }
                                             }
+
+                                            var pickListAttribute = new PicklistAttributeMetadata
+                                                                        {
+                                                                            OptionSet = optionSet
+                                                                        };
+                                            newAttribute = pickListAttribute;
                                         }
 
-                                        var pickListAttribute = new PicklistAttributeMetadata
-                                                                    {
-                                                                        OptionSet = optionSet
-                                                                    };
-                                        newAttribute = pickListAttribute;
                                         break;
                                     }
 

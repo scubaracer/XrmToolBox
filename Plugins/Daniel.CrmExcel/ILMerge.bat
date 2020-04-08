@@ -71,4 +71,7 @@ COPY tmp_merge\* . /Y
 
 ECHO Cleaning up...
 RD /s/q tmp_merge
+
+::move /Y Daniel.CrmExcel.dll ..\..\..\..\XrmToolbox\bin\debug\Plugins\
+COPY Daniel.CrmExcel.*  C:\Users\DJanse\AppData\Roaming\MscrmTools\XrmToolBox\Plugins\
 ECHO ------Done------

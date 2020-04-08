@@ -182,7 +182,7 @@
                                     {
                                         var logger = new LogManager(typeof(CrmExcelTool), ConnectionDetail);
 
-                                        MessageBox.Show("CRM Updated.");
+                                        MessageBox.Show("Data retrieved.");
                                     }
                                 },
                             AsyncArgument = null,
