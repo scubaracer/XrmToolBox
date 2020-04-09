@@ -52,7 +52,8 @@
     <SignAssembly>false</SignAssembly>
   </PropertyGroup>
   <PropertyGroup>
-    <AssemblyOriginatorKeyFile>CrmPartnersKey.snk</AssemblyOriginatorKeyFile>
+    <AssemblyOriginatorKeyFile>
+    </AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ExcelPackage, Version=1.0.0.1, Culture=neutral, PublicKeyToken=f8bb63aa9d6969e8, processorArchitecture=MSIL">
@@ -204,12 +205,9 @@
     <None Include="app.config">
       <SubType>Designer</SubType>
     </None>
-    <None Include="CrmPartnersKey.snk" />
-    <None Include="ILMerge.bat" />
     <None Include="Wpunt logo rood-wit.png" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="ILMerge.ignore" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -230,16 +228,26 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>if $(ConfigurationName) == Debug (
-
-IF NOT EXIST Plugins mkdir Plugins
-
-move /Y Daniel.CrmExcel.dll Plugins
-
-move /Y Daniel.CrmExcel.pdb Plugins
-
+    <PostBuildEvent>IF NOT EXIST Plugins mkdir Plugins
+move /Y .\Merged\Daniel.CrmExcel.dll Plugins
+move /Y .\Merged\Daniel.CrmExcel.pdb Plugins
 )</PostBuildEvent>
   </PropertyGroup>
+  <Target Name="AfterBuild" Condition="'$(Configuration)' == 'Debug'">
+    <ItemGroup>
+      <MergeAssemblies Include="$(OutputPath)\Daniel.CrmExcel.dll" />
+      <MergeAssemblies Include="$(OutputPath)\ExcelPackage.dll" />
+      <MergeAssemblies Include="$(OutputPath)\Ionic.Zip.dll" />
+      <MergeAssemblies Include="$(OutputPath)\Microsoft.Crm.Sdk.Proxy.dll" />
+      <MergeAssemblies Include="$(OutputPath)\Newtonsoft.Json.dll" />
+    </ItemGroup>
+    <PropertyGroup>
+      <OutputAssembly>$(OutputPath)Merged\Daniel.CrmExcel.dll</OutputAssembly>
+    </PropertyGroup>
+    <MakeDir Directories="$(OutputPath)Merged" />
+    <Message Text="MERGING: @(MergeAssemblies->'%(Filename)') into $(OutputAssembly)" Importance="High" />
+    <Exec Command="C:\Repos\scubaracer\XrmToolBox\packages\ILMerge.Tools.2.14.1208\tools\ILMerge.exe /log:ILMerge2.log /out:&quot;$(OutputAssembly)&quot; @(MergeAssemblies->'&quot;%(FullPath)&quot;', ' ')" />
+  </Target>
   <ProjectExtensions>
     <VisualStudio>
       <UserProperties BuildVersion_ConfigurationName="Release" />
