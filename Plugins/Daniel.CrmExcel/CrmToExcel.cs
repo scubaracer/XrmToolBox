@@ -174,7 +174,7 @@ namespace Daniel.CrmExcel
             catch (Exception exception)
             {
                 this.BackgroundWorker.ReportProgress(10, $"Retrieving Solution Error - {exception.Message}");
-                LogError("Error getting solution", exception);
+                LogError($"Error getting solution {exception.Message}", exception);
             }
         }
 
