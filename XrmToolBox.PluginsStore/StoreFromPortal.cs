@@ -27,8 +27,10 @@ namespace XrmToolBox.PluginsStore
         private PackageManager manager;
         private FileInfo[] plugins;
 
-        public StoreFromPortal()
+        public StoreFromPortal(bool allowConnectionControlsPreReleaseSearch)
         {
+            AllowConnectionControlPreRelease = allowConnectionControlsPreReleaseSearch;
+
             // Initializing folders variables
             nugetPluginsFolder = Path.Combine(Paths.XrmToolBoxPath, "NugetPlugins");
             applicationPluginsFolder = Paths.PluginsPath;
@@ -43,9 +45,11 @@ namespace XrmToolBox.PluginsStore
 
         public event EventHandler PluginsUpdated;
 
+        public bool AllowConnectionControlPreRelease { get; set; }
         public bool HasUpdates => XrmToolBoxPlugins?.Plugins.Any(p => p.Action == PackageInstallAction.Update) ?? false;
         public int PluginsCount => XrmToolBoxPlugins?.Plugins.Count ?? 0;
         public XtbPlugins XrmToolBoxPlugins { get; set; }
+        public List<string> Categories { get; set; }
 
         public long CalculateCacheFolderSize()
         {
@@ -108,17 +112,40 @@ namespace XrmToolBox.PluginsStore
             return null;
         }
 
-        public void LoadNugetPackages()
+        public bool IsConnectionControlsUpdateAvailable(out string version, out string releasenotes, string currentStoredVersion)
+        {
+            var ca = typeof(McTools.Xrm.Connection.ConnectionDetail).Assembly;
+            var nugetPlugin = manager.SourceRepository.FindPackage("MscrmTools.Xrm.Connection", new VersionSpec(), AllowConnectionControlPreRelease, false);
+
+            releasenotes = nugetPlugin.ReleaseNotes;
+            version = nugetPlugin.Version.Version + (!string.IsNullOrEmpty(nugetPlugin.Version.SpecialVersion) ? "-" + nugetPlugin.Version.SpecialVersion : "");
+            // initial run, curr stored version may be null
+            var currStoredVer = (currentStoredVersion != null) ? new Version(currentStoredVersion.Split('-')[0]) : null;
+
+            return ca.GetName().Version < nugetPlugin.Version.Version
+                   || ca.GetName().Version == nugetPlugin.Version.Version &&
+                   new Version(version.Split('-')[0]) == currStoredVer &&
+                   version != currentStoredVersion;
+        }
+
+        public void LoadNugetPackages(bool fromStorePortal = true)
         {
             plugins = new DirectoryInfo(applicationPluginsFolder).GetFiles();
             XrmToolBoxPlugins = new XtbPlugins();
             string url = "https://www.xrmtoolbox.com/_odata/plugins";
             do
             {
-                var tmpPlugins = GetContent<XtbPlugins>(url);
+                var tmpPlugins = GetContent<XtbPlugins>(url, fromStorePortal);
                 XrmToolBoxPlugins.Plugins.AddRange(tmpPlugins.Plugins);
                 url = tmpPlugins.NextLink;
             } while (url != null);
+
+            Categories = XrmToolBoxPlugins.Plugins
+                .Where(p => p.CategoriesList != null)
+                .SelectMany(p => p.CategoriesList?.Split(','))
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToList();
 
             foreach (var plugin in XrmToolBoxPlugins.Plugins)
             {
@@ -201,6 +228,47 @@ namespace XrmToolBox.PluginsStore
             {
                 Application.Restart();
             }
+        }
+
+        public bool PrepareConnectionControlsUpdate(Control parentControl, bool installOnNextRestart, out string version)
+        {
+            var nugetPlugin = manager.SourceRepository.FindPackage("MscrmTools.Xrm.Connection", new VersionSpec(), AllowConnectionControlPreRelease, false);
+            manager.InstallPackage(nugetPlugin, true, false);
+
+            var packageFolder = Path.Combine(nugetPluginsFolder, $"{nugetPlugin.Id}.{nugetPlugin.Version}");
+
+            var currentLocation = Assembly.GetExecutingAssembly().Location;
+            var folder = Path.GetDirectoryName(currentLocation);
+
+            var updates = new PluginUpdates { PreviousProcessId = Process.GetCurrentProcess().Id };
+            updates.Plugins.Add(new PluginUpdate
+            {
+                Source = Path.Combine(packageFolder, "lib\\net462\\McTools.Xrm.Connection.dll"),
+                Destination = Path.Combine(folder, "McTools.Xrm.Connection.dll"),
+                RequireRestart = true
+            });
+            updates.Plugins.Add(new PluginUpdate
+            {
+                Source = Path.Combine(packageFolder, "lib\\net462\\McTools.Xrm.Connection.WinForms.dll"),
+                Destination = Path.Combine(folder, "McTools.Xrm.Connection.WinForms.dll"),
+                RequireRestart = true
+            });
+
+            XmlSerializerHelper.SerializeToFile(updates, Path.Combine(Paths.XrmToolBoxPath, "Update.xml"));
+            bool returnedValue = false;
+            parentControl.Invoke(new Action(() =>
+            {
+                if (!installOnNextRestart && DialogResult.Yes == MessageBox.Show(parentControl,
+                        @"This application needs to restart to install new connection controls. Click Yes to restart this application now",
+                        @"Information", MessageBoxButtons.YesNo, MessageBoxIcon.Information))
+                {
+                    returnedValue = true;
+                }
+            }));
+
+            version = nugetPlugin.Version.Version + (!string.IsNullOrEmpty(nugetPlugin.Version.SpecialVersion) ? "-" + nugetPlugin.Version.SpecialVersion : "");
+
+            return returnedValue;
         }
 
         public PluginUpdates PrepareInstallationPackages(List<XtbPlugin> pluginsToInstall, BackgroundWorker worker = null)
@@ -413,7 +481,7 @@ namespace XrmToolBox.PluginsStore
             }
         }
 
-        private T GetContent<T>(string url) where T : new()
+        private T GetContent<T>(string url, bool fromStoreFromPortalForm) where T : new()
         {
             try
             {
@@ -434,8 +502,15 @@ namespace XrmToolBox.PluginsStore
                     }
                 }
             }
-            catch
+            catch (WebException error)
             {
+                if (fromStoreFromPortalForm &&
+                    (error.Status == WebExceptionStatus.ConnectFailure
+                    || error.Status == WebExceptionStatus.NameResolutionFailure
+                    || error.Status == WebExceptionStatus.ProxyNameResolutionFailure))
+                {
+                    throw new Exception($"Unable to connect to {url}. Please check your network settings", error);
+                }
             }
             return new T();
         }

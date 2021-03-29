@@ -1,4 +1,5 @@
-﻿using System;
+﻿using McTools.Xrm.Connection;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -175,6 +176,17 @@ namespace XrmToolBox
         [Description("When Windows shuts down and XrmToolBox have opened tools, do not prompt to confirm opened tools close")]
         public bool ClosePluginsSilentlyOnWindowsShutdown { get; set; } = true;
 
+        [Category("Connection controls")]
+        [DisplayName("Search pre release updates")]
+        [Description("Allow XrmToolBox to search pre release update (alpha, beta, etc.) of connection controls")]
+        public bool ConnectionControlsAllowPreReleaseUpdates { get; set; }
+
+        [ReadOnly(true)]
+        [Category("Connection controls")]
+        [DisplayName("Version")]
+        [Description("Current version of connection controls")]
+        public string ConnectionControlsVersion { get; set; }
+
         [Browsable(false)]
         public bool DisplayLargeIcons
         {
@@ -312,6 +324,11 @@ namespace XrmToolBox
         [DisplayName("Tools to display")]
         [Description("Indicates number of tools to display in Moste Recently Used items section of Start Page")]
         public int MruItemsToDisplay { get; set; } = 10;
+
+        [Category("Tools list display")]
+        [DisplayName("New ribbon display duration")]
+        [Description("Number of days after having installed a tool a \"NEW\" ribbon is displayed on the tool")]
+        public int NumberOfDaysToShowNewRibbon { get; set; } = 7;
 
         [Browsable(false)]
         public bool OptinForApplicationInsights { get; set; } = true;
@@ -460,7 +477,11 @@ namespace XrmToolBox
                 DoNotShowStartPage = DoNotShowStartPage,
                 Theme = Theme,
                 PluginsUpdateSkip = PluginsUpdateSkip,
-                OptinForApplicationInsights = OptinForApplicationInsights
+                OptinForApplicationInsights = OptinForApplicationInsights,
+                ConnectionControlsVersion = ConnectionControlsVersion,
+                ConnectionControlsAllowPreReleaseUpdates = ConnectionControlsAllowPreReleaseUpdates,
+                NumberOfDaysToShowNewRibbon = NumberOfDaysToShowNewRibbon,
+                RememberSession = RememberSession
             };
         }
 

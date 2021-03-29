@@ -12,6 +12,14 @@ using Message = System.Windows.Forms.Message;
 
 namespace XrmToolBox.PluginsStore
 {
+    public enum PackageInstallAction
+    {
+        None,
+        Install,
+        Update,
+        Unavailable
+    }
+
     public partial class StoreFormFromPortal : Form, IStoreForm
     {
         private const string AiEndpoint = "https://dc.services.visualstudio.com/v2/track";
@@ -23,7 +31,7 @@ namespace XrmToolBox.PluginsStore
         private Thread searchThread;
         private int sortedColumnIndex = -1;
 
-        public StoreFormFromPortal()
+        public StoreFormFromPortal(bool allowConnectionControlPrerelease)
         {
             InitializeComponent();
 
@@ -35,7 +43,7 @@ namespace XrmToolBox.PluginsStore
 
             selectedPackagesId = new List<string>();
 
-            store = new StoreFromPortal();
+            store = new StoreFromPortal(allowConnectionControlPrerelease);
             store.PluginsUpdated += (sender, e) => { PluginsUpdated?.Invoke(sender, e); };
             var size = store.CalculateCacheFolderSize();
             tsbCleanCacheFolder.ToolTipText = $@"Clean XrmToolBox Tool Library cache folder
@@ -63,7 +71,7 @@ Current cache folder size: {size}MB";
             tstSearch.Enabled = false;
 
             lvPlugins.Items.Clear();
-            tssLabel.Text = @"Retrieving tools from Nuget feed...";
+            tssLabel.Text = @"Retrieving tools from XrmToolBox portal...";
             tssProgress.Style = ProgressBarStyle.Marquee;
             tssProgress.Visible = true;
             tssPluginsCount.Visible = false;
@@ -137,7 +145,7 @@ Current cache folder size: {size}MB";
 
                 if (e.Error != null)
                 {
-                    MessageBox.Show(e.Error.Message);
+                    MessageBox.Show(this, $@"An error occured when refreshing list: {e.Error.Message}", @"Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -147,8 +155,29 @@ Current cache folder size: {size}MB";
                 tssPluginsCount.Visible = true;
 
                 lvPlugins.Items.AddRange(items.ToArray());
+
+                LoadCategories();
             };
             bw.RunWorkerAsync();
+        }
+
+        private void LoadCategories()
+        {
+            pnlCategories.Controls.Clear();
+
+            foreach (var category in store.Categories)
+            {
+                var cb = new CheckBox
+                {
+                    Name = $"cb{category}",
+                    Dock = DockStyle.Top,
+                    Text = category
+                };
+
+                cb.Click += tstSearch_TextChanged;
+
+                pnlCategories.Controls.Add(cb);
+            }
         }
 
         protected override void OnResizeBegin(EventArgs e)
@@ -291,12 +320,24 @@ Current cache folder size: {size}MB";
             var filter = text.ToString().ToLower();
             var options = Options.Instance;
             var lvic = new List<ListViewItem>();
-            foreach (var xtbPackage in store.XrmToolBoxPlugins.Plugins
-                .Where(p => filter.Length > 0 &&
-                            (p.Name.ToLower().Replace(" for xrmtoolbox", "").Contains(filter) ||
-                             p.Authors.ToLower().IndexOf(filter, StringComparison.Ordinal) >= 0)
-                            || p.Description.ToLower().Contains(filter)
-                            || filter.Length == 0)
+
+            var categories = pnlCategories.Controls.OfType<CheckBox>()
+                .Where(c => c.Checked)
+                .Select(c => c.Text)
+                .ToList();
+
+            var pluginsForCategory = store.XrmToolBoxPlugins.Plugins
+                .Where(p => categories.Count == 0 ||
+                             categories.All(c => p.CategoriesList?.Split(',').Contains(c) ?? false));
+
+            foreach (var xtbPackage in pluginsForCategory
+                .Where(p =>
+                            filter.Length > 0 &&
+
+                             (p.Name.ToLower().Replace(" for xrmtoolbox", "").Contains(filter) ||
+                              p.Authors.ToLower().IndexOf(filter, StringComparison.Ordinal) >= 0)
+                             || p.Description.ToLower().Contains(filter)
+                             || filter.Length == 0)
             )
             {
                 if (xtbPackage.Action == PackageInstallAction.Unavailable
@@ -535,24 +576,25 @@ Current cache folder size: {size}MB";
             if (e.Item.Checked)
             {
                 selectedPackagesId.Add(((XtbPlugin)e.Item.Tag).Id);
+                ManageUninstallButtonDisplay(true);
             }
             else
             {
                 selectedPackagesId.Remove(((XtbPlugin)e.Item.Tag).Id);
             }
-
-            ManageUninstallButtonDisplay();
         }
 
         private void lvPlugins_SelectedIndexChanged(object sender, EventArgs e)
         {
-            ManageUninstallButtonDisplay();
             pnlReleaseNotesDetails.Controls.Clear();
 
             if (lvPlugins.SelectedItems.Count == 0)
             {
+                tsbUninstall.Visible = false;
                 return;
             }
+
+            ManageUninstallButtonDisplay(false);
 
             splitContainer1.Panel2Collapsed = false;
 
@@ -566,26 +608,41 @@ Current cache folder size: {size}MB";
 
             if (!string.IsNullOrEmpty(releaseNotes))
             {
-                if (releaseNotes.ToLower().StartsWith("http") && Uri.TryCreate(releaseNotes, UriKind.Absolute, out _))
+                var rtb = new RichTextBox
                 {
-                    var llbl = new LinkLabel { Text = releaseNotes };
-                    llbl.Click += (s, evt) => { Process.Start(((LinkLabel)s).Text); };
-                    llbl.AutoSize = false;
-                    llbl.Dock = DockStyle.Fill;
-
-                    pnlReleaseNotesDetails.Controls.Add(llbl);
-                }
-                else
+                    Dock = DockStyle.Fill,
+                    AutoSize = false,
+                    ReadOnly = true,
+                    BorderStyle = BorderStyle.None
+                };
+                rtb.LinkClicked += (richTextBox, evt) =>
                 {
-                    var lbl = new Label
-                    {
-                        Text = releaseNotes,
-                        Dock = DockStyle.Fill,
-                        AutoSize = false
-                    };
+                    Process.Start(evt.LinkText);
+                };
+                rtb.Text = releaseNotes;
 
-                    pnlReleaseNotesDetails.Controls.Add(lbl);
-                }
+                pnlReleaseNotesDetails.Controls.Add(rtb);
+
+                //if (releaseNotes.ToLower().StartsWith("http") && Uri.TryCreate(releaseNotes, UriKind.Absolute, out _))
+                //{
+                //    var llbl = new LinkLabel { Text = releaseNotes };
+                //    llbl.Click += (s, evt) => { Process.Start(((LinkLabel)s).Text); };
+                //    llbl.AutoSize = false;
+                //    llbl.Dock = DockStyle.Fill;
+
+                //    pnlReleaseNotesDetails.Controls.Add(llbl);
+                //}
+                //else
+                //{
+                //    var lbl = new Label
+                //    {
+                //        Text = releaseNotes,
+                //        Dock = DockStyle.Fill,
+                //        AutoSize = false
+                //    };
+
+                //    pnlReleaseNotesDetails.Controls.Add(lbl);
+                //}
             }
             else
             {
@@ -603,7 +660,7 @@ Current cache folder size: {size}MB";
             {
                 case CompatibleState.DoesntFitMinimumVersion:
                     {
-                        lblNotif.Text = $@"This tool has not been developed specificaly to support latest breaking change version of XrmToolBox. Contact tool author to make him support at least version {Store.MinCompatibleVersion}";
+                        lblNotif.Text = $@"This tool has not been developed specificaly to support latest breaking change version of XrmToolBox. Contact tool author to make him support at least version {StoreFromPortal.MinCompatibleVersion}";
                         pbNotifIcon.Image = iiNotif.Images[2];
                         pnlNotif.Visible = true;
                     }
@@ -633,22 +690,27 @@ Current cache folder size: {size}MB";
             }
         }
 
-        private void ManageUninstallButtonDisplay()
+        private void ManageUninstallButtonDisplay(bool isCheck)
         {
-            var packages =
-                lvPlugins.CheckedItems.Cast<ListViewItem>()
-                    .Where(l => l.Tag is XtbPlugin &&
-                   (((XtbPlugin)l.Tag).Action == PackageInstallAction.None
-                   || ((XtbPlugin)l.Tag).Action == PackageInstallAction.Update))
-                    .Select(l => (XtbPlugin)l.Tag)
-                    .ToList();
-            if (packages.Count == 0)
+            List<XtbPlugin> packages;
+
+            if (isCheck)
+            {
+                packages =
+                    lvPlugins.CheckedItems.Cast<ListViewItem>()
+                        .Where(l => l.Tag is XtbPlugin &&
+                                    (((XtbPlugin)l.Tag).Action == PackageInstallAction.None
+                                     || ((XtbPlugin)l.Tag).Action == PackageInstallAction.Update))
+                        .Select(l => (XtbPlugin)l.Tag)
+                        .ToList();
+            }
+            else
             {
                 packages =
                     lvPlugins.SelectedItems.Cast<ListViewItem>()
                         .Where(l => l.Tag is XtbPlugin &&
-                   (((XtbPlugin)l.Tag).Action == PackageInstallAction.None
-                   || ((XtbPlugin)l.Tag).Action == PackageInstallAction.Update))
+                                    (((XtbPlugin)l.Tag).Action == PackageInstallAction.None
+                                     || ((XtbPlugin)l.Tag).Action == PackageInstallAction.Update))
                         .Select(l => (XtbPlugin)l.Tag)
                         .ToList();
             }
@@ -750,6 +812,12 @@ Current cache folder size: {size}MB";
                 lvPlugins.Enabled = true;
                 tssProgress.Visible = false;
                 tssLabel.Text = string.Empty;
+
+                if (evt.Error != null)
+                {
+                    MessageBox.Show(this, $@"An error occured: {evt.Error.Message}", @"Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
                 if ((bool)evt.Result)
                 {
@@ -868,7 +936,7 @@ Current cache folder size: {size}MB";
         {
             searchThread?.Abort();
             searchThread = new Thread(FilterPlugins);
-            searchThread.Start(tstSearch.Text);
+            searchThread.Start(tstSearch.Text == tstSearch.Tag?.ToString() ? string.Empty : tstSearch.Text);
         }
     }
 }

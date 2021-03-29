@@ -5,14 +5,16 @@
 
 using Microsoft.Crm.Sdk.Messages;
 using System;
+using System.Linq;
 using System.Windows.Forms;
+using XrmToolBox;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Args;
 using XrmToolBox.Extensibility.Interfaces;
 
 namespace MsCrmTools.SampleTool
 {
-    public partial class SampleTool : PluginControlBase, IGitHubPlugin, ICodePlexPlugin, IPayPalPlugin, IHelpPlugin, IStatusBarMessenger, IShortcutReceiver, IAboutPlugin
+    public partial class SampleTool : PluginControlBase, IGitHubPlugin, ICodePlexPlugin, IPayPalPlugin, IHelpPlugin, IStatusBarMessenger, IShortcutReceiver, IAboutPlugin, IDuplicatableTool, ISettingsPlugin, IPrivatePlugin, IMessageBusHost
     {
         #region Base tool implementation
 
@@ -198,10 +200,35 @@ namespace MsCrmTools.SampleTool
 
         #endregion Shortcut Receiver implementation
 
-        private void SampleTool_Load(object sender, EventArgs e)
+        #region IDuplicatableTool implementation
+
+        public event EventHandler<DuplicateToolArgs> DuplicateRequested;
+
+        public void ApplyState(object state)
         {
-            ShowInfoNotification("This is a notification that can lead to XrmToolBox repository", new Uri("http://github.com/MscrmTools/XrmToolBox"));
+            txtState.Text = state.ToString();
         }
+
+        public object GetState()
+        {
+            return txtState.Text;
+        }
+
+        private void tsbDuplicate_Click(object sender, EventArgs e)
+        {
+            DuplicateRequested?.Invoke(this, new DuplicateToolArgs("My custom state", true));
+        }
+
+        #endregion IDuplicatableTool implementation
+
+        #region ISettingsPlugin implementation
+
+        public void ShowSettings()
+        {
+            MessageBox.Show(@"Settings should be displayed instead of this dialog");
+        }
+
+        #endregion ISettingsPlugin implementation
 
         #region IAboutPlugin implementation
 
@@ -212,5 +239,35 @@ namespace MsCrmTools.SampleTool
         }
 
         #endregion IAboutPlugin implementation
+
+        private void btnCheckMultiSample_Click(object sender, EventArgs e)
+        {
+            var expectedPlugin = PluginManagerExtended.Instance.Plugins.FirstOrDefault(p =>
+                p.Value is PluginBase pb && pb.GetId() == Guid.Parse("{64A4E4E3-CAF9-4896-983A-341A297DEAF3}")
+            );
+
+            MessageBox.Show(expectedPlugin == null ? "Tool is not installed" : "Tool is installed");
+        }
+
+        private void SampleTool_Load(object sender, EventArgs e)
+        {
+            ShowInfoNotification("This is a notification that can lead to XrmToolBox repository", new Uri("http://github.com/MscrmTools/XrmToolBox"));
+        }
+
+        #region IMessageBusHost
+
+        public event EventHandler<MessageBusEventArgs> OnOutgoingMessage;
+
+        public void OnIncomingMessage(MessageBusEventArgs message)
+        {
+            throw new NotImplementedException();
+        }
+
+        private void SendMessage(string message)
+        {
+            OnOutgoingMessage?.Invoke(this, new MessageBusEventArgs("targetPlugin", false));
+        }
+
+        #endregion IMessageBusHost
     }
 }

@@ -41,6 +41,8 @@
             this.cmdSelectPrefix = new System.Windows.Forms.Button();
             this.txtPrefix = new System.Windows.Forms.TextBox();
             this.grpExcel = new System.Windows.Forms.GroupBox();
+            this.btnAddEntitiesToInclude = new System.Windows.Forms.Button();
+            this.txtEntitiesToInclude = new System.Windows.Forms.TextBox();
             this.button2 = new System.Windows.Forms.Button();
             this.button1 = new System.Windows.Forms.Button();
             this.btnSelectFile = new System.Windows.Forms.Button();
@@ -60,8 +62,7 @@
             this.cboLanguage = new System.Windows.Forms.ComboBox();
             this.label7 = new System.Windows.Forms.Label();
             this.label8 = new System.Windows.Forms.Label();
-            this.txtEntitiesToInclude = new System.Windows.Forms.TextBox();
-            this.btnAddEntitiesToInclude = new System.Windows.Forms.Button();
+            this.label9 = new System.Windows.Forms.Label();
             this.grpUpdate.SuspendLayout();
             this.grpExcel.SuspendLayout();
             this.SuspendLayout();
@@ -210,10 +211,28 @@
             this.grpExcel.TabStop = false;
             this.grpExcel.Text = "Excel Sheet generation";
             // 
+            // btnAddEntitiesToInclude
+            // 
+            this.btnAddEntitiesToInclude.Location = new System.Drawing.Point(430, 333);
+            this.btnAddEntitiesToInclude.Margin = new System.Windows.Forms.Padding(2);
+            this.btnAddEntitiesToInclude.Name = "btnAddEntitiesToInclude";
+            this.btnAddEntitiesToInclude.Size = new System.Drawing.Size(111, 25);
+            this.btnAddEntitiesToInclude.TabIndex = 24;
+            this.btnAddEntitiesToInclude.Text = "Add Entities To Include";
+            this.btnAddEntitiesToInclude.UseVisualStyleBackColor = true;
+            this.btnAddEntitiesToInclude.Click += new System.EventHandler(this.BtnAddEntitiesToInclude_Click);
+            // 
+            // txtEntitiesToInclude
+            // 
+            this.txtEntitiesToInclude.Location = new System.Drawing.Point(236, 338);
+            this.txtEntitiesToInclude.Name = "txtEntitiesToInclude";
+            this.txtEntitiesToInclude.Size = new System.Drawing.Size(189, 20);
+            this.txtEntitiesToInclude.TabIndex = 23;
+            // 
             // button2
             // 
             this.button2.Location = new System.Drawing.Point(441, 308);
-            this.button2.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.button2.Margin = new System.Windows.Forms.Padding(2);
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(111, 25);
             this.button2.TabIndex = 22;
@@ -224,7 +243,7 @@
             // button1
             // 
             this.button1.Location = new System.Drawing.Point(441, 259);
-            this.button1.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.button1.Margin = new System.Windows.Forms.Padding(2);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(111, 37);
             this.button1.TabIndex = 21;
@@ -385,28 +404,20 @@
             this.label8.TabIndex = 22;
             this.label8.Text = "1043 NL 1033 ENG";
             // 
-            // txtEntitiesToInclude
+            // label9
             // 
-            this.txtEntitiesToInclude.Location = new System.Drawing.Point(236, 338);
-            this.txtEntitiesToInclude.Name = "txtEntitiesToInclude";
-            this.txtEntitiesToInclude.Size = new System.Drawing.Size(189, 20);
-            this.txtEntitiesToInclude.TabIndex = 23;
-            // 
-            // btnAddEntitiesToInclude
-            // 
-            this.btnAddEntitiesToInclude.Location = new System.Drawing.Point(430, 333);
-            this.btnAddEntitiesToInclude.Margin = new System.Windows.Forms.Padding(2);
-            this.btnAddEntitiesToInclude.Name = "btnAddEntitiesToInclude";
-            this.btnAddEntitiesToInclude.Size = new System.Drawing.Size(111, 25);
-            this.btnAddEntitiesToInclude.TabIndex = 24;
-            this.btnAddEntitiesToInclude.Text = "Add Entities To Include";
-            this.btnAddEntitiesToInclude.UseVisualStyleBackColor = true;
-            this.btnAddEntitiesToInclude.Click += new System.EventHandler(this.BtnAddEntitiesToInclude_Click);
+            this.label9.AutoSize = true;
+            this.label9.Location = new System.Drawing.Point(606, 418);
+            this.label9.Name = "label9";
+            this.label9.Size = new System.Drawing.Size(18, 13);
+            this.label9.TabIndex = 23;
+            this.label9.Text = "x1";
             // 
             // CrmExcelTool
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.Controls.Add(this.label9);
             this.Controls.Add(this.label8);
             this.Controls.Add(this.label7);
             this.Controls.Add(this.cboLanguage);
@@ -463,5 +474,6 @@
         private System.Windows.Forms.Button button2;
         private System.Windows.Forms.Button btnAddEntitiesToInclude;
         private System.Windows.Forms.TextBox txtEntitiesToInclude;
+        private System.Windows.Forms.Label label9;
     }
 }

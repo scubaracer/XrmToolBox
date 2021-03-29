@@ -48,7 +48,7 @@ namespace XrmToolBox.New
         private int numberOfConnectionReceived;
         private IOrganizationService service;
         private StartPage startPage;
-        private IStore store;
+        private StoreFromPortal store;
 
         public NewForm(string[] args)
         {
@@ -182,6 +182,44 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
             }
         }
 
+        private void CheckForConnectionControlsUpdate(bool force = false)
+        {
+            if (store == null)
+                store = new StoreFromPortal(Options.Instance.ConnectionControlsAllowPreReleaseUpdates);
+
+            if (store.IsConnectionControlsUpdateAvailable(out string version, out string releasenotes,
+                Options.Instance.ConnectionControlsVersion))
+            {
+                Options.Instance.ConnectionControlsVersion = version;
+                Options.Instance.Save();
+
+                if (force || !Options.Instance.PluginsUpdateSkip.Any(
+                    x => x.Name == "McTools.Xrm.ConnectionControls"
+                         && x.Version == version
+                         && x.Date > DateTime.Now))
+                {
+                    var dialog = new NewConnectionVersion(version, releasenotes);
+                    if (dialog.ShowDialog(this) == DialogResult.Yes)
+                    {
+                        var restartNow = store.PrepareConnectionControlsUpdate(this, dialog.OnNextRestart,
+                            out string versionToStore);
+
+                        Options.Instance.ConnectionControlsVersion = versionToStore;
+                        Options.Instance.Save();
+                        if (restartNow)
+                        {
+                            Application.Restart();
+                        }
+                    }
+                    else
+                    {
+                        UpdatePluginUpdateSkip("McTools.Xrm.ConnectionControls", version, dialog.IsVersionSkipped,
+                            dialog.NumberOfDaysToSkip);
+                    }
+                }
+            }
+        }
+
         private string ExtractSwitchValue(string key, ref string[] args)
         {
             var name = string.Empty;
@@ -293,48 +331,97 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
             if (store == null)
             {
-                store = new StoreFromPortal();
-                if (store.PluginsCount == 0)
+                try
                 {
-                    store.LoadNugetPackages();
-                }
+                    CheckForConnectionControlsUpdate();
 
-                if (Options.Instance.ShowPluginUpdatesPanelAtStartup)
-                {
-                    var count = ((StoreFromPortal)store).XrmToolBoxPlugins.Plugins
-                        .Where(p => p.Action == PackageInstallAction.Update)
-                        .ToList().Count;
-
-                    pnlPluginsUpdate.Visible = count > 0;
-                    if (count > 0)
-                    {
-                        lblPluginsUpdateAvailable.Text = string.Format(lblPluginsUpdateAvailable.Tag.ToString(),
-                            count,
-                            count > 1 ? "s" : "",
-                            count > 1 ? "are" : "is");
-                    }
-                }
-            }
-
-            if (Options.Instance.DisplayPluginsStoreOnStartup)
-            {
-                if (Options.Instance.DisplayPluginsStoreOnlyIfUpdates)
-                {
                     if (store.PluginsCount == 0)
                     {
-                        store.LoadNugetPackages();
+                        store.LoadNugetPackages(false);
                     }
 
-                    if (store.HasUpdates)
+                    if (Options.Instance.ShowPluginUpdatesPanelAtStartup)
                     {
-                        tsddbTools_DropDownItemClicked(sender, new ToolStripItemClickedEventArgs(pluginsStoreToolStripMenuItem));
+                        var count = store.XrmToolBoxPlugins.Plugins
+                            .Where(p => p.Action == PackageInstallAction.Update)
+                            .ToList().Count;
+
+                        pnlPluginsUpdate.Visible = count > 0;
+                        if (count > 0)
+                        {
+                            lblPluginsUpdateAvailable.Text = string.Format(lblPluginsUpdateAvailable.Tag.ToString(),
+                                count,
+                                count > 1 ? "s" : "",
+                                count > 1 ? "are" : "is");
+                        }
                     }
+
+                    if (Options.Instance.DisplayPluginsStoreOnStartup)
+                    {
+                        if (Options.Instance.DisplayPluginsStoreOnlyIfUpdates)
+                        {
+                            if (store.PluginsCount == 0)
+                            {
+                                store.LoadNugetPackages(false);
+                            }
+
+                            if (store.HasUpdates)
+                            {
+                                tsddbTools_DropDownItemClicked(sender,
+                                    new ToolStripItemClickedEventArgs(pluginsStoreToolStripMenuItem));
+                            }
+                        }
+                        else
+                        {
+                            tsddbTools_DropDownItemClicked(sender,
+                                new ToolStripItemClickedEventArgs(pluginsStoreToolStripMenuItem));
+                        }
+                    }
+
+                    // Prepare Categories
+                    PrepareCategories();
                 }
-                else
+                catch
                 {
-                    tsddbTools_DropDownItemClicked(sender, new ToolStripItemClickedEventArgs(pluginsStoreToolStripMenuItem));
+                    // We avoid to make XrmToolBox crash if querying web services fail
+                    pluginsForm.DisplayCategories(null);
                 }
             }
+        }
+
+        private void PrepareCategories()
+        {
+            if (store?.XrmToolBoxPlugins == null) return;
+
+            var dico = new Dictionary<string, List<string>>();
+            foreach (var plugin in store.XrmToolBoxPlugins.Plugins)
+            {
+                if (plugin.CategoriesList == null) continue;
+
+                foreach (var category in plugin.CategoriesList.Split(','))
+                {
+                    if (!dico.ContainsKey(category))
+                    {
+                        dico.Add(category, new List<string>());
+                    }
+
+                    foreach (var file in plugin.Files)
+                    {
+                        foreach (var tool in PluginManagerExtended.Instance.Plugins)
+                        {
+                            var assemblyFile = Path.GetFileName(tool.Value.GetType().Assembly.Location);
+                            if (assemblyFile.ToLower() == Path.GetFileName(file).ToLower())
+                            {
+                                dico[category].Add(tool.Metadata.Name);
+                            }
+                        }
+                    }
+                }
+            }
+
+            dico = dico.OrderByDescending(obj => obj.Key).ToDictionary(obj => obj.Key, obj => obj.Value);
+
+            pluginsForm.DisplayCategories(dico);
         }
 
         private void SetTheme()
@@ -447,10 +534,10 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
         #region Plugins Form events
 
-        private void DisplayPluginControl(Lazy<IXrmToolBoxPlugin, IPluginMetadata> plugin, bool displayConnected = true)
+        private UserControl DisplayPluginControl(Lazy<IXrmToolBoxPlugin, IPluginMetadata> plugin, bool displayConnected = true)
         {
             Guid pluginControlInstanceId = Guid.NewGuid();
-
+            UserControl pluginControl = null;
             try
             {
                 var mruItem = new MostRecentlyUsedItem
@@ -459,7 +546,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     Date = DateTime.Now
                 };
 
-                var pluginControl = (UserControl)plugin.Value.GetControl();
+                pluginControl = (UserControl)plugin.Value.GetControl();
                 pluginControl.Tag = pluginControlInstanceId;
 
                 // ReSharper disable once SuspiciousTypeConversion.Global
@@ -495,17 +582,41 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
                 ((IXrmToolBoxPluginControl)pluginControl).OnRequestConnection += NewForm_OnRequestConnection;
                 ((IXrmToolBoxPluginControl)pluginControl).OnWorkAsync += (sender, e) =>
-                {
-                    //var bw = new BackgroundWorker();
-                    //bw.DoWork += (s, evt) => { evt.Result = AnnouncementManager.GetItemToDisplay(); };
-                    //bw.RunWorkerCompleted += (s, evt) => { AnnouncementManager.Display(evt.Result as AnnouncementItem); };
-                    //bw.RunWorkerAsync();
-                };
+               {
+                   //var bw = new BackgroundWorker();
+                   //bw.DoWork += (s, evt) => { evt.Result = AnnouncementManager.GetItemToDisplay(); };
+                   //bw.RunWorkerCompleted += (s, evt) => { AnnouncementManager.Display(evt.Result as AnnouncementItem); };
+                   //bw.RunWorkerAsync();
+               };
 
                 if (pnlConnectLoading.Visible)
                 {
                     pnlConnectLoading.SendToBack();
                     pnlConnectLoading.Visible = false;
+                }
+
+                if (pluginControl is IDuplicatableTool idt)
+                {
+                    idt.DuplicateRequested += (sender, e) =>
+                    {
+                        var pluginName = ((PluginForm)((PluginControlBase)sender).ParentForm).PluginName;
+                        if (e.NewConnection)
+                        {
+                            var pluginToDuplicate = pluginsForm.PluginManager.ValidatedPlugins.FirstOrDefault(p => p.Metadata.Name == pluginName);
+
+                            if (((PluginForm)dpMain.ActiveContent).Control is IDuplicatableTool dt)
+                            {
+                                ConnectUponApproval(new DuplicateToolWithConnectionArgs { SourceTool = dt, Tool = pluginToDuplicate, State = e.State });
+                            }
+                        }
+                        else
+                        {
+                            if (sender is IDuplicatableTool dt)
+                            {
+                                pluginsForm.DuplicateTool(((PluginForm)dpMain.ActiveContent).PluginName, dt, e.State);
+                            }
+                        }
+                    };
                 }
 
                 var pluginForm = new PluginForm(pluginControl, name, plugin.Metadata.Name);
@@ -531,9 +642,11 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                 {
                     tssOpenOrg.Visible = false;
                     tsbOpenOrg.Visible = false;
+                    tsbImpersonate.Visible = false;
                 }
 
-                var pluginInOption = Options.Instance.MostUsedList.FirstOrDefault(i => i.Name == plugin.Value.GetType().FullName);
+                var pluginInOption =
+                    Options.Instance.MostUsedList.FirstOrDefault(i => i.Name == plugin.Value.GetType().FullName);
                 if (pluginInOption == null)
                 {
                     pluginInOption = new PluginUseCount { Name = plugin.Value.GetType().FullName, Count = 0 };
@@ -549,8 +662,9 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     bool displayAdvertisement = true;
                     try
                     {
-                        var assembly = Assembly.LoadFile(new FileInfo(Assembly.GetExecutingAssembly().Location).Directory +
-                                              "\\McTools.StopAdvertisement.dll");
+                        var assembly = Assembly.LoadFile(
+                            new FileInfo(Assembly.GetExecutingAssembly().Location).Directory +
+                            "\\McTools.StopAdvertisement.dll");
                         {
                             Type type = assembly.GetType("McTools.StopAdvertisement.LicenseManager");
                             if (type != null)
@@ -580,7 +694,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                 }
 
                 var existingItem = MostRecentlyUsedItems.Instance.Items.FirstOrDefault(i
-                => i.PluginName == mruItem.PluginName && i.ConnectionId == mruItem.ConnectionId);
+                    => i.PluginName == mruItem.PluginName && i.ConnectionId == mruItem.ConnectionId);
                 if (existingItem == null)
                 {
                     MostRecentlyUsedItems.Instance.Items.Add(mruItem);
@@ -592,15 +706,21 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     MostRecentlyUsedItems.Instance.Save();
                 }
 
-                ai.WritePageView(plugin.Metadata.Name, plugin.Value.GetVersion());
+                if (!(pluginControl is IPrivatePlugin))
+                {
+                    ai.WritePageView(plugin.Metadata.Name, plugin.Value.GetVersion());
+                }
 
                 Options.Instance.Save();
+
+                return pluginControl;
             }
             catch (Exception error)
             {
                 Invoke(new Action(() =>
                 {
-                    MessageBox.Show(this, $@"An error occured when trying to display this tool: {error.Message}", @"Error",
+                    MessageBox.Show(this, $@"An error occured when trying to display this tool: {error.Message}",
+                        @"Error",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
 
                     if (pnlConnectLoading.Visible)
@@ -609,6 +729,8 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                         pnlConnectLoading.Visible = false;
                     }
                 }));
+
+                return pluginControl;
             }
         }
 
@@ -668,7 +790,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
             {
                 var location = e.Plugin.Value.GetType().Assembly.Location;
 
-                var updatedPlugin = ((StoreFromPortal)store).GetPluginUpdateByFile(location);
+                var updatedPlugin = store.GetPluginUpdateByFile(location);
                 if (updatedPlugin != null)
                 {
                     var exitPluginUpdate = false;
@@ -681,13 +803,13 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                         var dialog = new NewPluginVersion(updatedPlugin);
                         if (dialog.ShowDialog(this) == DialogResult.Yes)
                         {
-                            var pu = ((StoreFromPortal)store).PrepareInstallationPackages(new List<XtbPlugin> { updatedPlugin });
+                            var pu = store.PrepareInstallationPackages(new List<XtbPlugin> { updatedPlugin });
                             if (pu.Plugins.Any(p => p.RequireRestart))
                             {
                                 if (dialog.OnNextRestart)
                                 {
-                                    ((StoreFromPortal)store).PerformInstallation(pu, this);
-                                    UpdatePluginUpdateSkip(updatedPlugin, true, 1);
+                                    store.PerformInstallation(pu, this);
+                                    UpdatePluginUpdateSkip(updatedPlugin.Name, updatedPlugin.Version, true, 1);
                                 }
                                 else
                                 {
@@ -697,7 +819,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                                     {
                                         RequestCloseTabs(dpMain.Contents.OfType<PluginForm>(),
                                             new PluginCloseInfo(ToolBoxCloseReason.CloseAll));
-                                        ((StoreFromPortal)store).PerformInstallation(pu, this);
+                                        store.PerformInstallation(pu, this);
                                         Application.Restart();
                                     }
                                 }
@@ -708,7 +830,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
                         if (!exitPluginUpdate)
                         {
-                            UpdatePluginUpdateSkip(updatedPlugin, dialog.IsVersionSkipped, dialog.NumberOfDaysToSkip);
+                            UpdatePluginUpdateSkip(updatedPlugin.Name, updatedPlugin.Version, dialog.IsVersionSkipped, dialog.NumberOfDaysToSkip);
                         }
                     }
                 }
@@ -718,7 +840,11 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
             if (e.Plugin.Value is INoConnectionRequired)
             {
-                DisplayPluginControl(e.Plugin);
+                var ctrl = DisplayPluginControl(e.Plugin);
+                if (ctrl is IDuplicatableTool dt && e.SourceTool != null)
+                {
+                    dt.ApplyState(e.State ?? e.SourceTool.GetState());
+                }
                 Cursor = Cursors.Default;
                 return;
             }
@@ -736,7 +862,11 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                 {
                     if (e.Plugin != null)
                     {
-                        DisplayPluginControl(e.Plugin);
+                        var ctrl = DisplayPluginControl(e.Plugin);
+                        if (ctrl is IDuplicatableTool dt && e.SourceTool != null)
+                        {
+                            dt.ApplyState(e.State ?? e.SourceTool.GetState());
+                        }
                     }
                 }
             }
@@ -744,7 +874,11 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
             {
                 if (e.Plugin != null)
                 {
-                    DisplayPluginControl(e.Plugin, e.MruInfo == null || e.MruInfo.Item.ConnectionId != Guid.Empty);
+                    var ctrl = DisplayPluginControl(e.Plugin, e.MruInfo == null || e.MruInfo.Item.ConnectionId != Guid.Empty);
+                    if (ctrl is IDuplicatableTool dt && e.SourceTool != null)
+                    {
+                        dt.ApplyState(e.State ?? e.SourceTool.GetState());
+                    }
                 }
             }
 
@@ -779,10 +913,10 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
             }
         }
 
-        private void UpdatePluginUpdateSkip(XtbPlugin updatedPlugin, bool isVersionSkipped, int nbDays)
+        private void UpdatePluginUpdateSkip(string name, string version, bool isVersionSkipped, int nbDays)
         {
             var existing = Options.Instance.PluginsUpdateSkip.FirstOrDefault(
-                x => x.Name == updatedPlugin.Name);
+                x => x.Name == name);
 
             if (existing != null)
             {
@@ -797,8 +931,8 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
             Options.Instance.PluginsUpdateSkip.Add(new PluginUpdateSkip
             {
-                Name = updatedPlugin.Name,
-                Version = updatedPlugin.Version,
+                Name = name,
+                Version = version,
                 Date = nextDate
             });
             Options.Instance.Save();
@@ -882,82 +1016,155 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     parameter.ConnControl.Dispose();
                 }
 
-                connectionDetail = e.ConnectionDetail;
-                service = e.OrganizationService;
+                _ = Invoke(new Action(() =>
+                  {
+                      if (e.ConnectionDetail.UseOnline)
+                      {
+                          tsbOpenOrg.Text = @"Open environment";
+                          tsbOpenOrg.ToolTipText = @"Open the connected environment in your web browser";
+                          tsbOpenOrg.Image = new Bitmap(Properties.Resources.powerapps16);
+                      }
+                      else
+                      {
+                          tsbOpenOrg.Text = @"Open organization";
+                          tsbOpenOrg.ToolTipText = @"Open the connected organization in your web browser";
+                          tsbOpenOrg.Image = new Bitmap(Properties.Resources.LogoDyn365);
+                      }
 
-                Invoke(new Action(() =>
-                {
-                    ccsb.SetConnectionStatus(true, e.ConnectionDetail);
-                    ccsb.SetMessage(string.Empty);
+                      tsbImpersonate.Enabled = e.ConnectionDetail.CanImpersonate;
+                      tsbImpersonate.Visible = true;
 
-                    if (e.ConnectionDetail.UseOnline)
-                    {
-                        tsbOpenOrg.Text = @"Open environment";
-                        tsbOpenOrg.ToolTipText = @"Open the connected environment in your web browser";
-                        tsbOpenOrg.Image = new Bitmap(Properties.Resources.powerapps16);
-                    }
-                    else
-                    {
-                        tsbOpenOrg.Text = @"Open organization";
-                        tsbOpenOrg.ToolTipText = @"Open the connected organization in your web browser";
-                        tsbOpenOrg.Image = new Bitmap(Properties.Resources.LogoDyn365);
-                    }
+                      if (parameter != null)
+                      {
+                          var us = parameter.ConnectionParmater as UserControl;
+                          var p = parameter.ConnectionParmater as Lazy<IXrmToolBoxPlugin, IPluginMetadata>;
+                          var rcea = parameter.ConnectionParmater as RequestConnectionEventArgs;
+                          var dtwc = parameter.ConnectionParmater as DuplicateToolWithConnectionArgs;
 
-                    if (parameter != null)
-                    {
-                        var us = parameter.ConnectionParmater as UserControl;
-                        var p = parameter.ConnectionParmater as Lazy<IXrmToolBoxPlugin, IPluginMetadata>;
-                        var rcea = parameter.ConnectionParmater as RequestConnectionEventArgs;
+                          if (us != null)
+                          {
+                              ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                              ccsb.SetMessage(string.Empty);
+                              connectionDetail = e.ConnectionDetail;
+                              service = e.OrganizationService;
 
-                        if (us != null)
-                        {
-                            if (!(us.Tag is Lazy<IXrmToolBoxPlugin, IPluginMetadata> pluginModel))
-                            {
-                                // Actual Plugin was passed, Just update the plugin's Tab.
-                                UpdateTabConnection((PluginForm)us.ParentForm, e.ConnectionDetail);
-                            }
-                            else
-                            {
-                                DisplayPluginControl(pluginModel);
-                            }
-                        }
-                        else if (p != null)
-                        {
-                            DisplayPluginControl(p);
-                        }
-                        else if (parameter.ConnectionParmater?.ToString() == "ApplyConnectionToTabs" && dpMain.Contents.OfType<PluginForm>().Any())
-                        {
-                            ApplyConnectionToTabs(e.ConnectionDetail);
-                        }
-                        else if (rcea != null)
-                        {
-                            var userControl = (UserControl)rcea.Control;
+                              if (!(us.Tag is Lazy<IXrmToolBoxPlugin, IPluginMetadata> pluginModel))
+                              {
+                                  // Actual Plugin was passed, Just update the plugin's Tab.
+                                  UpdateTabConnection((PluginForm)us.ParentForm, e.ConnectionDetail);
+                              }
+                              else
+                              {
+                                  DisplayPluginControl(pluginModel);
+                              }
+                          }
+                          else if (p != null)
+                          {
+                              ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                              ccsb.SetMessage(string.Empty);
+                              connectionDetail = e.ConnectionDetail;
+                              service = e.OrganizationService;
 
-                            rcea.Control.UpdateConnection(e.OrganizationService, connectionDetail, rcea.ActionName, rcea.Parameter);
+                              DisplayPluginControl(p);
+                          }
+                          else if (parameter.ConnectionParmater?.ToString() == "ApplyConnectionToTabs" && dpMain.Contents.OfType<PluginForm>().Any())
+                          {
+                              ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                              ccsb.SetMessage(string.Empty);
+                              connectionDetail = e.ConnectionDetail;
+                              service = e.OrganizationService;
 
-                            if (userControl.ParentForm != null)
-                            {
-                                var indexOfParenthesis = userControl.ParentForm?.Text?.IndexOf("(") ?? -1;
-                                var pluginName = userControl.ParentForm?.Text?.Substring(0, indexOfParenthesis - 1) ?? "N/A";
+                              ApplyConnectionToTabs(e.ConnectionDetail);
+                          }
+                          else if (rcea != null)
+                          {
+                              if (rcea.Parameter is Lazy<IXrmToolBoxPlugin, IPluginMetadata> plugin)
+                              {
+                                  ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                                  ccsb.SetMessage(string.Empty);
+                                  connectionDetail = e.ConnectionDetail;
+                                  service = e.OrganizationService;
 
-                                userControl.ParentForm.Text = $@"{pluginName} ({e.ConnectionDetail.ConnectionName})";
-                            }
-                        }
-                    }
-                    else if (dpMain.Contents.OfType<PluginForm>().Count() > 1)
-                    {
-                        ApplyConnectionToTabs(e.ConnectionDetail);
-                    }
-                    else if (dpMain.Contents.OfType<PluginForm>().Count() == 1)
-                    {
-                        UpdateTabConnection(dpMain.Contents.OfType<PluginForm>().First(), e.ConnectionDetail);
-                    }
+                                  DisplayPluginControl(plugin);
+                              }
+                              else
+                              {
+                                  var userControl = (UserControl)rcea.Control;
 
-                    StartPluginWithConnection();
+                                  if (rcea.ActionName != "AdditionalOrganization")
+                                  {
+                                      ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                                      ccsb.SetMessage(string.Empty);
+                                      connectionDetail = e.ConnectionDetail;
+                                      service = e.OrganizationService;
 
-                    tssOpenOrg.Visible = true;
-                    tsbOpenOrg.Visible = true;
-                }));
+                                      if (userControl.ParentForm != null)
+                                      {
+                                          var indexOfParenthesis = userControl.ParentForm?.Text?.IndexOf("(") ?? -1;
+                                          var pluginName =
+                                              userControl.ParentForm?.Text?.Substring(0, indexOfParenthesis - 1) ??
+                                              "N/A";
+
+                                          userControl.ParentForm.Text =
+                                              $@"{pluginName} ({e.ConnectionDetail.ConnectionName})";
+                                      }
+                                  }
+
+                                  ((PluginForm)userControl.ParentForm).UpdateConnection(e.OrganizationService,
+                                      e.ConnectionDetail, rcea.ActionName, rcea.Parameter);
+                              }
+                          }
+                          else if (dtwc != null)
+                          {
+                              ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                              ccsb.SetMessage(string.Empty);
+                              connectionDetail = e.ConnectionDetail;
+                              service = e.OrganizationService;
+
+                              var state = dtwc.State ?? dtwc.SourceTool.GetState();
+                              var duplicatedTool = DisplayPluginControl(dtwc.Tool);
+                              ((IDuplicatableTool)duplicatedTool).ApplyState(state);
+                          }
+                          else
+                          {
+                              ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                              ccsb.SetMessage(string.Empty);
+                              connectionDetail = e.ConnectionDetail;
+                              service = e.OrganizationService;
+                          }
+                      }
+                      else if (dpMain.Contents.OfType<PluginForm>().Count() > 1)
+                      {
+                          ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                          ccsb.SetMessage(string.Empty);
+                          connectionDetail = e.ConnectionDetail;
+                          service = e.OrganizationService;
+
+                          ApplyConnectionToTabs(e.ConnectionDetail);
+                      }
+                      else if (dpMain.Contents.OfType<PluginForm>().Count() == 1)
+                      {
+                          ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                          ccsb.SetMessage(string.Empty);
+                          connectionDetail = e.ConnectionDetail;
+                          service = e.OrganizationService;
+
+                          UpdateTabConnection(dpMain.Contents.OfType<PluginForm>().First(), e.ConnectionDetail);
+                      }
+                      else
+                      {
+                          ccsb.SetConnectionStatus(true, e.ConnectionDetail);
+                          ccsb.SetMessage(string.Empty);
+                          connectionDetail = e.ConnectionDetail;
+                          service = e.OrganizationService;
+                      }
+
+                      StartPluginWithConnection();
+
+                      tssOpenOrg.Visible = true;
+                      tsbOpenOrg.Visible = true;
+                      tsbImpersonate.Visible = true;
+                  }));
             };
             cManager.ConnectionFailed += (sender, e) =>
             {
@@ -1037,11 +1244,21 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
         private PluginForm GetPluginByName(string name, Guid connectionDetailId)
         {
+            if (Guid.TryParse(name, out Guid pluginId) && !pluginId.Equals(Guid.Empty))
+            {
+                var expectedPlugin = PluginManagerExtended.Instance.Plugins.FirstOrDefault(p =>
+                    p.Value is PluginBase pb && pb.GetId().Equals(pluginId));
+
+                if (expectedPlugin != null)
+                {
+                    name = expectedPlugin.Metadata.Name;
+                }
+            }
+
             return dpMain.Contents
                 .OfType<PluginForm>()
-                .FirstOrDefault(c => c.PluginName == name
-                                     && ((PluginControlBase)c.Control).ConnectionDetail.ConnectionId ==
-                                     connectionDetailId);
+                .LastOrDefault(c => c.PluginName == name
+                                     && (((PluginControlBase)c.Control).ConnectionDetail?.ConnectionId ?? Guid.Empty).Equals(connectionDetailId));
         }
 
         private bool IsMessageValid(object sender, MessageBusEventArgs message)
@@ -1083,13 +1300,13 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
             var sourceDetail = ((PluginControlBase)sender).ConnectionDetail;
 
-            var content = GetPluginByName(message.TargetPlugin, sourceDetail.ConnectionId ?? Guid.Empty);
-            if (content == null || message.NewInstance)
+            var content = message.NewInstance ? null : GetPluginByName(message.TargetPlugin, sourceDetail?.ConnectionId ?? Guid.Empty);
+            if (content == null)
             {
                 pluginsForm.OpenPlugin(message.TargetPlugin);
             }
 
-            content = GetPluginByName(message.TargetPlugin, sourceDetail.ConnectionId ?? Guid.Empty);
+            content = GetPluginByName(message.TargetPlugin, sourceDetail?.ConnectionId ?? Guid.Empty);
             if (content == null)
             {
                 MessageBox.Show($@"Cannot switch to tool {message.TargetPlugin}.", message.SourcePlugin, MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -1231,7 +1448,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
                 if (dpMain.ActiveContent is PluginForm pf)
                 {
-                    tsmiAbout.Click -= tsmiAbout_Click;
+                    //  tsmiAbout.Click -= tsmiAbout_Click;
 
                     if (pf.Control is PluginControlBase pcb)
                     {
@@ -1241,8 +1458,8 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                 }
                 else
                 {
-                    tsmiAbout.Click -= tsmiAbout_Click;
-                    tsmiAbout.Click += tsmiAbout_Click;
+                    //tsmiAbout.Click -= tsmiAbout_Click;
+                    //tsmiAbout.Click += tsmiAbout_Click;
                 }
             }
         }
@@ -1369,7 +1586,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     PluginsStore.Options.Instance.IsInitialized = true;
                 }
 
-                IStoreForm form = new StoreFormFromPortal();
+                IStoreForm form = new StoreFormFromPortal(Options.Instance.ConnectionControlsAllowPreReleaseUpdates);
                 ((StoreFormFromPortal)form).PluginsClosingRequested += (s, evt) =>
                 {
                     RequestCloseTabs(dpMain.Contents.OfType<PluginForm>(), new PluginCloseInfo(ToolBoxCloseReason.CloseAll));
@@ -1380,6 +1597,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                 ((Form)form).ShowDialog(this);
                 pluginsForm.PluginManager.IsWatchingForNewPlugins = true;
                 pluginsForm.ReloadPluginsList();
+                PrepareCategories();
 
                 // Apply option to show Plugins Store on startup on main options
                 if (Options.Instance.DisplayPluginsStoreOnStartup != PluginsStore.Options.Instance.DisplayPluginsStoreOnStartup)
@@ -1391,7 +1609,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
             {
                 fHelper.DisplayConnectionsList(this);
             }
-            else if (e.ClickedItem == settingsToolStripMenuItem)
+            else if (e.ClickedItem == tsmiXtbSettings)
             {
                 var oDialog = new OptionsDialog(Options.Instance);
                 if (oDialog.ShowDialog(this) == DialogResult.OK)
@@ -1399,7 +1617,41 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     bool reinitDisplay = Options.Instance.MostUsedList.Count != oDialog.Option.MostUsedList.Count
                                          || Options.Instance.IconDisplayMode != oDialog.Option.IconDisplayMode
                                          || !oDialog.Option.HiddenPlugins.SequenceEqual(Options.Instance.HiddenPlugins)
-                                         || Options.Instance.PluginsDisplayOrder != oDialog.Option.PluginsDisplayOrder;
+                                         || Options.Instance.PluginsDisplayOrder != oDialog.Option.PluginsDisplayOrder
+                                         || Options.Instance.NumberOfDaysToShowNewRibbon != oDialog.Option.NumberOfDaysToShowNewRibbon;
+
+                    if (Options.Instance.ConnectionControlsAllowPreReleaseUpdates !=
+                        oDialog.Option.ConnectionControlsAllowPreReleaseUpdates)
+                    {
+                        store.AllowConnectionControlPreRelease = oDialog.Option.ConnectionControlsAllowPreReleaseUpdates;
+                        Options.Instance.ConnectionControlsAllowPreReleaseUpdates = oDialog.Option.ConnectionControlsAllowPreReleaseUpdates;
+                        Options.Instance.Save();
+
+                        if (store.AllowConnectionControlPreRelease == false)
+                        {
+                            var message =
+                                @"You asked to not use Connection Controls pre release anymore.
+
+Would you like to reinstall last stable release of connection controls?";
+
+                            if (MessageBox.Show(this, message, @"Question", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                            {
+                                var restartNow = store.PrepareConnectionControlsUpdate(this, false, out string versionToStore);
+
+                                Options.Instance.ConnectionControlsVersion = versionToStore;
+                                Options.Instance.Save();
+
+                                if (restartNow)
+                                {
+                                    Application.Restart();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            CheckForConnectionControlsUpdate(true);
+                        }
+                    }
 
                     if (Options.Instance.DoNotRememberPluginsWithoutConnection != oDialog.Option.DoNotRememberPluginsWithoutConnection
                         && oDialog.Option.DoNotRememberPluginsWithoutConnection)
@@ -1428,6 +1680,11 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                     cManager.ReuseConnections = Options.Instance.ReuseConnections;
                 }
             }
+            else if (e.ClickedItem == tsmiToolSettings)
+            {
+                var plugin = (ISettingsPlugin)((PluginForm)dpMain.ActiveContent).Control;
+                plugin.ShowSettings();
+            }
         }
 
         #region Document management
@@ -1445,6 +1702,36 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
             else if (e.ClickedItem == cmsMainCloseThis)
             {
                 RequestCloseTab((PluginForm)dpMain.ActiveContent, new PluginCloseInfo(ToolBoxCloseReason.CloseCurrent));
+            }
+            else if (e.ClickedItem == cmsMainDuplicateTool)
+            {
+                if (((PluginForm)dpMain.ActiveContent).Control is IDuplicatableTool dt)
+                {
+                    pluginsForm.DuplicateTool(((PluginForm)dpMain.ActiveContent).PluginName, dt, null);
+                }
+                else
+                {
+                    pluginsForm.OpenPlugin(((PluginForm)dpMain.ActiveContent).PluginName);
+                }
+            }
+            else if (e.ClickedItem == cmsMainDuplicateToolWithConnection)
+            {
+                var pluginName = ((PluginForm)dpMain.ActiveContent).PluginName;
+                var plugin = pluginsForm.PluginManager.ValidatedPlugins.FirstOrDefault(p => p.Metadata.Name == pluginName);
+
+                if (((PluginForm)dpMain.ActiveContent).Control is IDuplicatableTool dt)
+                {
+                    ConnectUponApproval(new DuplicateToolWithConnectionArgs { SourceTool = dt, Tool = plugin });
+                }
+                else
+                {
+                    ConnectUponApproval(new RequestConnectionEventArgs
+                    { ActionName = "", Control = ((PluginForm)dpMain.ActiveDocument).Control, Parameter = plugin });
+                }
+            }
+            else if (e.ClickedItem == tsmiChangeTabConnection)
+            {
+                ConnectUponApproval(new RequestConnectionEventArgs { ActionName = "", Control = ((PluginForm)dpMain.ActiveDocument).Control });
             }
         }
 
@@ -1588,7 +1875,14 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
         private void llDonate_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            Process.Start("http://mscrmtools.blogspot.fr/p/xrmtoolbox-sponsoring.html");
+            string pluginName = null;
+            if (currentContent is PluginForm pf)
+            {
+                pluginName = pf.PluginName;
+            }
+
+            var form = new DonationIntroForm(pluginName);
+            form.ShowDialog(this);
         }
 
         #endregion Support panel
@@ -1602,6 +1896,15 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
         {
             pnlPluginsUpdate.Visible = false;
             tsddbTools_DropDownItemClicked(null, new ToolStripItemClickedEventArgs(pluginsStoreToolStripMenuItem));
+        }
+
+        private void tsbImpersonate_Click(object sender, System.EventArgs e)
+        {
+            var dialog = new UserSelectionDialog(connectionDetail.ServiceClient);
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                connectionDetail.Impersonate(dialog.SelectedUser.Id, dialog.SelectedUser.GetAttributeValue<string>("fullname"));
+            }
         }
     }
 }
