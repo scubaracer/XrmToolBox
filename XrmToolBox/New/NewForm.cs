@@ -527,6 +527,12 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
         private void StartPage_OpenPluginRequested(object sender, OpenFavoritePluginEventArgs e)
         {
             initialPluginName = e.Item.PluginName;
+            if (e.NewConnectionNeeded)
+            {
+                pluginsForm.OpenPlugin(initialPluginName, null, true);
+                return;
+            }
+
             StartPluginWithoutConnection();
         }
 
@@ -838,6 +844,13 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
 
             Cursor = Cursors.WaitCursor;
 
+            if (e.NeedNewConnection)
+            {
+                ConnectUponApproval(e.Plugin);
+                Cursor = Cursors.Default;
+                return;
+            }
+
             if (e.Plugin.Value is INoConnectionRequired)
             {
                 var ctrl = DisplayPluginControl(e.Plugin);
@@ -1022,7 +1035,7 @@ We recommend that you remove the corresponding files from XrmToolBox Plugins fol
                       {
                           tsbOpenOrg.Text = @"Open environment";
                           tsbOpenOrg.ToolTipText = @"Open the connected environment in your web browser";
-                          tsbOpenOrg.Image = new Bitmap(Properties.Resources.powerapps16);
+                          tsbOpenOrg.Image = new Bitmap(Properties.Resources.Dataverse_16x16);
                       }
                       else
                       {

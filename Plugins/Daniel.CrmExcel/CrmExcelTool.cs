@@ -86,6 +86,8 @@
                         Work = (w, e) =>
                             {
                                 var selectedNodes = tvwEntities.Nodes["ROOT"].Nodes.Cast<TreeNode>().Where(a => a.Checked).Select(a => a.Text).ToList();
+                                
+                                ConnectionDetail.Timeout = new TimeSpan(0,0,10,0); 
                                 var crmToExcel = new CrmToExcel(Service, w);
 
                                 crmToExcel.CrmToExcelSheet(solution, this.txtExcelFile.Text, selectedNodes, chkUseSolutionXml.Checked, this.chkIncludeOwnerEtc.Checked, languageCode);
